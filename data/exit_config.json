@@ -8,7 +8,7 @@
   "early": {
     "description": "Tokens 20min-6h old",
     "mode": "staged",
-    "position_fraction": {"value": 0.05, "min": 0.02, "max": 0.15},
+    "position_fraction": {"value": 0.10, "min": 0.02, "max": 0.15},
     "tp1_pct": {"value": 60, "min": 30, "max": 500},
     "tp1_sell_fraction": {"value": 0.50, "min": 0.25, "max": 0.75},
     "tp2_pct": {"value": 150, "min": 80, "max": 1000},

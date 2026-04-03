@@ -86,8 +86,8 @@ POSITION_MONITOR_INTERVAL: int = 12
 # --- Trading ---
 BASE_PRIVATE_KEY: str = os.getenv('BASE_PRIVATE_KEY', '')
 TRADING_ENABLED: bool = os.getenv('TRADING_ENABLED', 'false').lower() == 'true'
-POSITION_FRACTION: float = 0.05  # 5% of wallet per trade
-MAX_POSITION_PCT: float = 5.0  # Same as above, used in safety checks
+POSITION_FRACTION: float = 0.10  # 10% of wallet per trade
+MAX_POSITION_PCT: float = 10.0  # Same as above, used in safety checks
 DAILY_LOSS_LIMIT_ETH: float = 0.5
 DAILY_LOSS_LIMIT_PCT: float = 15.0
 MAX_SINGLE_TOKEN_PCT: float = 15.0

@@ -8,7 +8,7 @@ Python files — but NOT this file, wallet.py, executor.py, or main.py.
 
 # === POSITION LIMITS ===
 # Max 5% of wallet per trade (no absolute ETH cap — scales with wallet)
-MAX_POSITION_PCT = 5.0
+MAX_POSITION_PCT = 10.0
 
 # === DAILY LIMITS ===
 # Pause all new trades if daily realised loss exceeds either of these
