@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "version": 1,
+    "last_updated": "2026-04-03T00:00:00Z",
+    "last_updated_by": "manual",
+    "description": "Exit strategy config for Base chain"
+  },
+  "early": {
+    "description": "Tokens 20min-6h old",
+    "mode": "staged",
+    "position_fraction": {"value": 0.05, "min": 0.02, "max": 0.15},
+    "tp1_pct": {"value": 60, "min": 30, "max": 500},
+    "tp1_sell_fraction": {"value": 0.50, "min": 0.25, "max": 0.75},
+    "tp2_pct": {"value": 150, "min": 80, "max": 1000},
+    "tp2_sell_fraction": {"value": 0.25, "min": 0.10, "max": 0.50},
+    "trailing_pct": {"value": 25, "min": 10, "max": 60},
+    "trailing_activation_pct": {"value": 20, "min": 5, "max": 50},
+    "stop_loss_pct": {"value": 18, "min": 18, "max": 70, "_locked": true},
+    "min_hold_seconds": {"value": 300, "min": 0, "max": 900, "note": "Only delays trailing stop — stop loss always fires immediately"},
+    "volume_death_txns": {"value": 20, "min": 5, "max": 100}
+  },
+  "established": {
+    "description": "Tokens 6h+ old",
+    "mode": "trailing",
+    "position_fraction": {"value": 0.03, "min": 0.01, "max": 0.10},
+    "trailing_pct": {"value": 15, "min": 10, "max": 40},
+    "trailing_activation_pct": {"value": 10, "min": 5, "max": 30},
+    "stop_loss_pct": {"value": 18, "min": 18, "max": 50, "_locked": true},
+    "min_hold_seconds": {"value": 300, "min": 0, "max": 600, "note": "Only delays trailing stop — stop loss always fires immediately"},
+    "volume_death_txns": {"value": 20, "min": 5, "max": 100}
+  }
+}

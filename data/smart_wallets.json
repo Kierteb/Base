@@ -1,0 +1,8 @@
+{
+  "_meta": {
+    "version": 1,
+    "last_updated": "2026-04-03T00:00:00Z",
+    "description": "Tracked smart wallets on Base chain. Populated by wallet discovery."
+  },
+  "wallets": []
+}

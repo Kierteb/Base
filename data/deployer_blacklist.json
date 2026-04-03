@@ -1,0 +1,7 @@
+{
+  "_meta": {
+    "version": 1,
+    "description": "Permanently blocked deployer addresses — serial scam deployers"
+  },
+  "deployers": []
+}

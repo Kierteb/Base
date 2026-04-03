@@ -1,0 +1,10 @@
+config/.env
+data/scanner.db
+data/scanner.db-wal
+data/scanner.db-shm
+data/safety_cache.json
+data/config_snapshots/
+logs/
+__pycache__/
+*.pyc
+.venv/

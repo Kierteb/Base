@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "version": 1,
+    "last_updated": "2026-04-03T00:00:00Z",
+    "last_updated_by": "manual",
+    "description": "Fresh scoring config for Base chain — not ported from Solana"
+  },
+  "alert_threshold": {"value": 65, "min": 30, "max": 95},
+  "min_signal_types": {"value": 2, "min": 1, "max": 5},
+  "signals": {
+    "smart_wallet_1": {"enabled": true, "points": {"value": 30, "min": 10, "max": 50}, "category": "smart_wallet", "description": "1 tracked wallet bought"},
+    "smart_wallet_2_plus": {"enabled": true, "points": {"value": 25, "min": 10, "max": 40}, "category": "smart_wallet", "description": "2+ tracked wallets bought"},
+    "volume_spike_10x": {"enabled": true, "points": {"value": 25, "min": 5, "max": 40}, "category": "volume", "description": "H1 volume 10x above H24 average"},
+    "volume_spike_5x": {"enabled": true, "points": {"value": 15, "min": 5, "max": 30}, "category": "volume", "description": "H1 volume 5x above H24 average"},
+    "sustained_volume": {"enabled": true, "points": {"value": 20, "min": 5, "max": 35}, "category": "volume", "description": "H1 vol >$50k and H24 vol >$200k"},
+    "price_pump_100": {"enabled": true, "points": {"value": 15, "min": 5, "max": 30}, "category": "price", "description": "Price up >100% in 1hr"},
+    "price_acceleration_30": {"enabled": true, "points": {"value": 10, "min": 5, "max": 25}, "category": "price", "description": "Price up >30% in 1hr"},
+    "buy_sell_ratio_3": {"enabled": true, "points": {"value": 15, "min": 5, "max": 25}, "category": "buying_pressure", "description": "Buy/sell ratio >3:1 in 1hr"},
+    "buy_sell_ratio_2": {"enabled": true, "points": {"value": 10, "min": 5, "max": 20}, "category": "buying_pressure", "description": "Buy/sell ratio >2:1 in 1hr"},
+    "high_txn_count": {"enabled": true, "points": {"value": 10, "min": 5, "max": 20}, "category": "organic", "description": ">200 transactions in 1hr"},
+    "organic_buying": {"enabled": true, "points": {"value": 15, "min": 5, "max": 25}, "category": "organic", "description": "Avg buy <$200, 20+ buys"},
+    "mcap_sweet_spot": {"enabled": true, "points": {"value": 10, "min": 5, "max": 20}, "category": "market_cap", "description": "MCap $100k-$5M"},
+    "ownership_renounced": {"enabled": true, "points": {"value": 10, "min": 5, "max": 20}, "category": "safety_bonus", "description": "Contract ownership renounced"},
+    "lp_burned": {"enabled": true, "points": {"value": 10, "min": 5, "max": 20}, "category": "safety_bonus", "description": "LP burned not just locked"},
+    "audited": {"enabled": true, "points": {"value": 15, "min": 5, "max": 25}, "category": "safety_bonus", "description": "Formally audited contract"},
+    "zero_tax": {"enabled": true, "points": {"value": 5, "min": 0, "max": 15}, "category": "safety_bonus", "description": "No buy/sell tax"},
+    "high_tax": {"enabled": true, "points": {"value": -15, "min": -30, "max": -5}, "category": "penalty", "description": "Tax >3%"},
+    "modifiable_restrictions": {"enabled": true, "points": {"value": -20, "min": -35, "max": -10}, "category": "penalty", "description": "Owner can modify transfer rules"},
+    "external_calls": {"enabled": true, "points": {"value": -25, "min": -40, "max": -10}, "category": "penalty", "description": "Token makes external calls"},
+    "serial_deployer": {"enabled": true, "points": {"value": -30, "min": -50, "max": -10}, "category": "penalty", "description": "Creator deployed 5+ tokens"},
+    "owner_active": {"enabled": true, "points": {"value": -20, "min": -35, "max": -10}, "category": "penalty", "description": "Owner still has control"}
+  }
+}
