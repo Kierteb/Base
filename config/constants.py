@@ -54,7 +54,7 @@ BURN_ADDRESSES: set = {
 
 # --- Safety Filter Thresholds ---
 MIN_TOKEN_AGE_SECONDS: int = 1200  # 20 minutes
-MIN_LIQUIDITY_USD: float = 100_000.0
+MIN_LIQUIDITY_USD: float = 50_000.0
 MAX_BUY_TAX_PCT: float = 5.0
 MAX_SELL_TAX_PCT: float = 10.0
 MIN_LP_LOCKED_PCT: float = 80.0
