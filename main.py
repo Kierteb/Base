@@ -64,11 +64,13 @@ def dexscreener_cycle() -> None:
             address = token['contract_address']
             dex = dex_data.get(address.lower())
 
-            # Update token with latest DexScreener data
+            # Update token with latest DexScreener data (including the actual pair it matched)
             if dex:
                 update_token(address,
                              liquidity_usd=dex.get('liquidity_usd', 0),
-                             market_cap_usd=dex.get('market_cap', 0))
+                             market_cap_usd=dex.get('market_cap', 0),
+                             pair_address=dex.get('pair_address', ''),
+                             dex_id=dex.get('dex_id', ''))
 
             # Score the token
             try:
