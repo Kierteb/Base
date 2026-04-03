@@ -89,41 +89,79 @@ def fetch_single_token(contract_address: str) -> dict | None:
 
 
 def fetch_base_new_pairs(limit: int = 50) -> list[dict]:
-    """Fetch recently created pairs on Base chain from DexScreener."""
+    """
+    Fetch Base chain tokens from multiple DexScreener endpoints:
+    1. Token boosts (promoted tokens)
+    2. Search queries for Base trending categories
+    3. Token profiles
+    """
+    all_pairs = {}
+
+    # Method 1: Token profiles (latest promoted)
     try:
-        resp = requests.get(
-            f'{DEXSCREENER_BASE_URL}/pairs/base',
-            timeout=10
-        )
+        resp = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
         resp.raise_for_status()
-        data = resp.json()
+        profiles = resp.json()
+        base_addresses = [p['tokenAddress'] for p in profiles if p.get('chainId') == 'base']
+        if base_addresses:
+            token_data = fetch_token_data(base_addresses)
+            for addr, data in token_data.items():
+                all_pairs[addr] = data
     except (requests.RequestException, ValueError) as e:
-        write_log(f'DEXSCREENER | New pairs fetch error: {e}')
-        return []
+        write_log(f'DEXSCREENER | Token profiles error: {e}')
 
-    pairs = data.get('pairs') or []
-    results = []
-    for pair in pairs[:limit]:
-        address = pair.get('baseToken', {}).get('address', '').lower()
-        if not address:
-            continue
+    # Method 2: Token boosts
+    try:
+        boosts = fetch_token_boosts()
+        if boosts:
+            boost_addresses = [b['contract_address'] for b in boosts if b.get('contract_address')]
+            if boost_addresses:
+                token_data = fetch_token_data(boost_addresses)
+                for addr, data in token_data.items():
+                    all_pairs[addr] = data
+    except Exception as e:
+        write_log(f'DEXSCREENER | Token boosts error: {e}')
 
-        liquidity = pair.get('liquidity') or {}
-        volume = pair.get('volume') or {}
+    # Method 3: Search queries for trending Base tokens
+    search_queries = ['base meme', 'base new', 'base trending', 'base degen']
+    for query in search_queries:
+        try:
+            resp = requests.get(
+                f'{DEXSCREENER_BASE_URL}/search',
+                params={'q': query},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            for pair in (data.get('pairs') or []):
+                if pair.get('chainId') != 'base':
+                    continue
+                address = pair.get('baseToken', {}).get('address', '').lower()
+                if not address or address in all_pairs:
+                    continue
 
-        results.append({
-            'contract_address': address,
-            'symbol': pair.get('baseToken', {}).get('symbol', ''),
-            'name': pair.get('baseToken', {}).get('name', ''),
-            'price_usd': float(pair.get('priceUsd') or 0),
-            'liquidity_usd': float(liquidity.get('usd', 0) or 0),
-            'h24_volume': float(volume.get('h24', 0) or 0),
-            'pair_address': pair.get('pairAddress', ''),
-            'dex_id': pair.get('dexId', ''),
-            'pair_created_at': pair.get('pairCreatedAt'),
-            'url': pair.get('url', ''),
-        })
+                liquidity = pair.get('liquidity') or {}
+                volume = pair.get('volume') or {}
 
+                all_pairs[address] = {
+                    'contract_address': address,
+                    'symbol': pair.get('baseToken', {}).get('symbol', ''),
+                    'name': pair.get('baseToken', {}).get('name', ''),
+                    'price_usd': float(pair.get('priceUsd') or 0),
+                    'liquidity_usd': float(liquidity.get('usd', 0) or 0),
+                    'h24_volume': float(volume.get('h24', 0) or 0),
+                    'pair_address': pair.get('pairAddress', ''),
+                    'dex_id': pair.get('dexId', ''),
+                    'pair_created_at': pair.get('pairCreatedAt'),
+                    'url': pair.get('url', ''),
+                }
+            time.sleep(0.3)
+        except (requests.RequestException, ValueError) as e:
+            write_log(f'DEXSCREENER | Search "{query}" error: {e}')
+
+    results = list(all_pairs.values())[:limit]
+    if results:
+        write_log(f'DEXSCREENER | Discovered {len(results)} Base token(s) from profiles/boosts/search')
     return results
 
 
