@@ -83,11 +83,14 @@ def dexscreener_cycle() -> None:
             if result.get('should_alert'):
                 try:
                     from alerts.telegram import send_alert
-                    sent = send_alert(token, result, dex)
-                    if sent:
-                        alerted += 1
+                    send_alert(token, result, dex)
+                    alerted += 1
                 except ImportError:
                     pass
+
+            # Attempt buy if score meets threshold and trading is enabled
+            if result.get('meets_threshold') and TRADING_ENABLED and dex:
+                _try_buy(token, result, dex)
 
             _check_token_staleness(token, result, dex)
 
@@ -97,6 +100,82 @@ def dexscreener_cycle() -> None:
     except Exception as e:
         print(f'  [ERROR] DexScreener cycle failed: {e}')
         write_log(f'ERROR | DexScreener cycle: {e}')
+        import traceback
+        traceback.print_exc()
+
+
+def _try_buy(token: dict, score_result: dict, dex_data: dict) -> None:
+    """Run safety filters and execute a buy if everything passes."""
+    address = token['contract_address']
+    symbol = token.get('symbol', address[:12])
+
+    try:
+        from safety.filter_chain import run_filter_chain
+        from trading.positions import can_open_position, open_position, calculate_position_size
+        from trading.executor import buy_token
+        from trading.wallet import get_eth_balance
+        from trading.notifications import send_trade_notification
+        from monitoring.logger import get_open_positions
+
+        # Check if we already have a position in this token
+        open_positions = get_open_positions()
+        if any(p['contract_address'].lower() == address.lower() for p in open_positions):
+            return
+
+        # Check wallet and daily limits
+        balance = get_eth_balance()
+        can_trade, reason = can_open_position(balance)
+        if not can_trade:
+            write_log(f'TRADE | Skipping {symbol}: {reason}')
+            return
+
+        # Run full safety filter chain
+        safety = run_filter_chain(address, dex_data=dex_data, token_data=token)
+        if not safety['passed']:
+            write_log(f'TRADE | {symbol} failed safety: {safety["summary"][:200]}')
+            return
+
+        # Calculate position size
+        eth_amount = calculate_position_size(balance, token.get('alert_type', 'early'))
+        if eth_amount <= 0 or eth_amount > balance * 0.95:
+            return
+
+        # Execute buy
+        write_log(f'TRADE | Buying {symbol} — score {score_result["score"]}, {eth_amount:.4f} ETH')
+        result = buy_token(
+            token_address=address,
+            eth_amount=eth_amount,
+            dex_id=dex_data.get('dex_id', 'uniswap'),
+        )
+
+        if result.get('success'):
+            position_id = open_position(
+                contract_address=address,
+                symbol=symbol,
+                alert_type='early',
+                entry_price_usd=dex_data.get('price_usd', 0),
+                entry_eth=eth_amount,
+                token_amount=str(result.get('token_amount', 0)),
+                entry_tx=result.get('tx_hash', ''),
+                score=score_result['score'],
+                safety_score=0,
+            )
+            write_log(f'TRADE | BUY SUCCESS #{position_id} — {symbol} | {eth_amount:.4f} ETH | tx: {result.get("tx_hash", "")[:16]}...')
+
+            send_trade_notification(
+                trade_type='BUY',
+                symbol=symbol,
+                contract_address=address,
+                eth_amount=eth_amount,
+                price_usd=dex_data.get('price_usd', 0),
+                score=score_result['score'],
+                tx_hash=result.get('tx_hash', ''),
+            )
+        else:
+            write_log(f'TRADE | BUY FAILED — {symbol}: {result.get("error", "unknown")}')
+
+    except Exception as e:
+        write_log(f'TRADE | Error buying {symbol}: {e}')
         import traceback
         traceback.print_exc()
 
