@@ -13,6 +13,7 @@ from urllib.parse import urlparse, parse_qs
 from monitoring.logger import (
     get_scanner_stats, get_open_positions, get_closed_positions,
     get_recent_alerts, get_active_tokens, get_wallet_stats,
+    get_top_scoring_tokens,
 )
 from trading.wallet import get_eth_balance
 
@@ -37,6 +38,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._serve_json({'tokens': get_active_tokens()[:50]})
         elif path == '/api/wallets':
             self._serve_json({'wallets': get_wallet_stats()})
+        elif path == '/api/top-tokens':
+            self._serve_json({'tokens': get_top_scoring_tokens(limit=30)})
         else:
             self.send_error(404)
 
@@ -53,6 +56,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         positions = get_open_positions()
         closed = get_closed_positions(limit=10)
         alerts = get_recent_alerts(limit=10)
+        top_tokens = get_top_scoring_tokens(limit=20)
 
         # Wallet balance
         try:
@@ -128,6 +132,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         </div>
     </div>
 
+    <h2>Top Scoring Tokens (Live)</h2>
+    <table>
+        <tr><th>Token</th><th>Score</th><th>Signals</th><th>Liquidity</th><th>MCap</th><th>DEX</th><th>Last Scored</th></tr>
+        {''.join(_top_token_row(t) for t in top_tokens) or '<tr><td colspan="7" style="color:#475569">No tokens scored yet — waiting for discovery</td></tr>'}
+    </table>
+
     <h2>Open Positions</h2>
     <table>
         <tr><th>Token</th><th>Entry</th><th>Current</th><th>P&L</th><th>Hold Time</th><th>Score</th></tr>
@@ -159,6 +169,47 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass  # Suppress access logs
+
+
+def _top_token_row(t: dict) -> str:
+    score = t.get('score', 0)
+    if score >= 65:
+        score_color = 'green'
+    elif score >= 40:
+        score_color = 'orange'
+    else:
+        score_color = ''
+
+    symbol = t.get('symbol', t['contract_address'][:8])
+    addr = t['contract_address']
+    pair = t.get('pair_address', '')
+    dex_id = t.get('dex_id', '')
+    liquidity = t.get('liquidity_usd', 0)
+    mcap = t.get('market_cap_usd', 0)
+    signals = t.get('signal_types_count', 0)
+    last_scored = (t.get('last_scored') or '')[:16]
+
+    # DexScreener link — use pair address if available, otherwise token search
+    if pair:
+        dex_link = f'https://dexscreener.com/base/{pair}'
+    else:
+        dex_link = f'https://dexscreener.com/base/{addr}'
+
+    # Breakdown tooltip
+    breakdown = t.get('breakdown', [])
+    breakdown_text = ' | '.join(f'{b.get("signal","")}: {b.get("points",0):+d}' for b in breakdown[:5])
+
+    return (
+        f'<tr>'
+        f'<td><a href="{dex_link}" target="_blank" title="{breakdown_text}">{symbol}</a></td>'
+        f'<td class="{score_color}" style="font-weight:700">{score}</td>'
+        f'<td>{signals}</td>'
+        f'<td class="mono">${liquidity:,.0f}</td>'
+        f'<td class="mono">${mcap:,.0f}</td>'
+        f'<td>{dex_id}</td>'
+        f'<td>{last_scored}</td>'
+        f'</tr>'
+    )
 
 
 def _position_row(p: dict) -> str:

@@ -734,6 +734,39 @@ def get_scanner_stats() -> dict:
 
 # === Logging ===
 
+def get_top_scoring_tokens(limit: int = 20) -> list[dict]:
+    """Get tokens with the highest recent scores, with their latest DexScreener data."""
+    conn = _ensure_db()
+    cursor = conn.execute('''
+        SELECT s.contract_address, t.symbol, t.name, s.score, s.signal_types_count,
+               s.breakdown, s.timestamp, t.liquidity_usd, t.market_cap_usd,
+               t.dex_id, t.pair_address, t.safety_score
+        FROM scores s
+        JOIN tokens t ON s.contract_address = t.contract_address
+        WHERE t.status = 'active'
+          AND s.id IN (
+              SELECT MAX(id) FROM scores GROUP BY contract_address
+          )
+        ORDER BY s.score DESC
+        LIMIT ?
+    ''', (limit,))
+    tokens = []
+    for r in cursor.fetchall():
+        try:
+            breakdown = json.loads(r[5]) if r[5] else []
+        except (json.JSONDecodeError, TypeError):
+            breakdown = []
+        tokens.append({
+            'contract_address': r[0], 'symbol': r[1], 'name': r[2],
+            'score': r[3], 'signal_types_count': r[4], 'breakdown': breakdown,
+            'last_scored': r[6], 'liquidity_usd': r[7] or 0,
+            'market_cap_usd': r[8] or 0, 'dex_id': r[9] or '',
+            'pair_address': r[10] or '', 'safety_score': r[11] or 0,
+        })
+    conn.close()
+    return tokens
+
+
 def write_log(message: str) -> None:
     os.makedirs(LOG_DIR, exist_ok=True)
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
