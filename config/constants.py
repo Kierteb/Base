@@ -15,7 +15,8 @@ BASE_WS_URL: str = os.getenv('BASE_WS_URL', f'wss://base-mainnet.g.alchemy.com/v
 
 # --- Basescan ---
 BASESCAN_API_KEY: str = os.getenv('BASESCAN_API_KEY', '')
-BASESCAN_BASE_URL: str = 'https://api.basescan.org/api'
+# Basescan V1 is deprecated — use Etherscan V2 or Alchemy for token transfers
+BASESCAN_BASE_URL: str = 'https://api.etherscan.io/v2/api'
 
 # --- GoPlus Security ---
 GOPLUS_API_KEY: str = os.getenv('GOPLUS_API_KEY', '')
