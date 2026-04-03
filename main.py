@@ -93,6 +93,9 @@ def dexscreener_cycle() -> None:
             # Attempt buy if score meets threshold and trading is enabled
             if result.get('meets_threshold') and TRADING_ENABLED and dex:
                 _try_buy(token, result, dex)
+            elif result.get('meets_threshold') and dex:
+                # Mark as meeting threshold but not traded (for dashboard)
+                update_token(address, safety_score=0)
 
             _check_token_staleness(token, result, dex)
 
@@ -151,8 +154,12 @@ def _try_buy(token: dict, score_result: dict, dex_data: dict) -> None:
         # Run full safety filter chain
         safety = run_filter_chain(address, dex_data=dex_data, token_data=token)
         if not safety['passed']:
+            update_token(address, safety_score=-1)
             write_log(f'TRADE | {symbol} failed safety: {safety["summary"][:200]}')
             return
+
+        # Passed all safety filters
+        update_token(address, safety_score=1)
 
         # Calculate position size
         eth_amount = calculate_position_size(balance, token.get('alert_type', 'early'))

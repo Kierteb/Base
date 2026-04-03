@@ -173,9 +173,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def _top_token_row(t: dict) -> str:
     score = t.get('score', 0)
-    if score >= 65:
+    safety = t.get('safety_score', 0)
+    # Green ONLY if safety passed (1) and score meets threshold
+    if safety == 1 and score >= 45:
         score_color = 'green'
-    elif score >= 40:
+    elif safety == -1:
+        score_color = 'red'
+    elif score >= 45:
         score_color = 'orange'
     else:
         score_color = ''
