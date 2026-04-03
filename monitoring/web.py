@@ -132,16 +132,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
         </div>
     </div>
 
-    <h2>Top Scoring Tokens (Live)</h2>
-    <table>
-        <tr><th>Token</th><th>Score</th><th>Signals</th><th>Liquidity</th><th>MCap</th><th>DEX</th><th>Last Scored</th></tr>
-        {''.join(_top_token_row(t) for t in top_tokens) or '<tr><td colspan="7" style="color:#475569">No tokens scored yet — waiting for discovery</td></tr>'}
-    </table>
-
     <h2>Open Positions</h2>
     <table>
         <tr><th>Token</th><th>Entry</th><th>Current</th><th>P&L</th><th>Hold Time</th><th>Score</th></tr>
         {''.join(_position_row(p) for p in positions) or '<tr><td colspan="6" style="color:#475569">No open positions</td></tr>'}
+    </table>
+
+    <h2>Top Scoring Tokens (Live)</h2>
+    <table>
+        <tr><th>Token</th><th>Score</th><th>Signals</th><th>Liquidity</th><th>MCap</th><th>DEX</th><th>Last Scored</th></tr>
+        {''.join(_top_token_row(t) for t in top_tokens) or '<tr><td colspan="7" style="color:#475569">No tokens scored yet — waiting for discovery</td></tr>'}
     </table>
 
     <h2>Recent Closed</h2>
