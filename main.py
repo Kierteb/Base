@@ -116,6 +116,7 @@ def _try_buy(token: dict, score_result: dict, dex_data: dict) -> None:
         from trading.wallet import get_eth_balance
         from trading.notifications import send_trade_notification
         from monitoring.logger import get_open_positions
+        from config.constants import MIN_LIQUIDITY_USD
 
         # Check if we already have a position in this token
         open_positions = get_open_positions()
@@ -129,6 +130,22 @@ def _try_buy(token: dict, score_result: dict, dex_data: dict) -> None:
             write_log(f'TRADE | Skipping {symbol}: {reason}')
             return
 
+        # Re-fetch fresh DexScreener data right before buying (not cached)
+        # This ensures liquidity is real and current
+        from signals.dexscreener import fetch_single_token
+        fresh_dex = fetch_single_token(address)
+        if not fresh_dex:
+            write_log(f'TRADE | {symbol}: no fresh DexScreener data, skipping')
+            return
+
+        fresh_liquidity = fresh_dex.get('liquidity_usd', 0)
+        if fresh_liquidity < MIN_LIQUIDITY_USD:
+            write_log(f'TRADE | {symbol}: fresh liquidity ${fresh_liquidity:,.0f} < ${MIN_LIQUIDITY_USD:,.0f} min, skipping')
+            return
+
+        # Use fresh data for safety checks
+        dex_data = fresh_dex
+
         # Run full safety filter chain
         safety = run_filter_chain(address, dex_data=dex_data, token_data=token)
         if not safety['passed']:
@@ -140,12 +157,15 @@ def _try_buy(token: dict, score_result: dict, dex_data: dict) -> None:
         if eth_amount <= 0 or eth_amount > balance * 0.95:
             return
 
-        # Execute buy
-        write_log(f'TRADE | Buying {symbol} — score {score_result["score"]}, {eth_amount:.4f} ETH')
+        # Execute buy — use the exact DEX and pair from DexScreener
+        trade_dex = dex_data.get('dex_id', 'uniswap')
+        trade_pair = dex_data.get('pair_address', '')
+        write_log(f'TRADE | Buying {symbol} — score {score_result["score"]}, {eth_amount:.4f} ETH, '
+                  f'liq ${fresh_liquidity:,.0f}, dex {trade_dex}, pair {trade_pair[:16]}')
         result = buy_token(
             token_address=address,
             eth_amount=eth_amount,
-            dex_id=dex_data.get('dex_id', 'uniswap'),
+            dex_id=trade_dex,
         )
 
         if result.get('success'):
