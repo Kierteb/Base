@@ -14,6 +14,7 @@ from monitoring.logger import (
     get_scanner_stats, get_open_positions, get_closed_positions,
     get_recent_alerts, get_active_tokens, get_wallet_stats,
 )
+from trading.wallet import get_eth_balance
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -53,6 +54,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         closed = get_closed_positions(limit=10)
         alerts = get_recent_alerts(limit=10)
 
+        # Wallet balance
+        try:
+            wallet_balance = get_eth_balance()
+        except Exception:
+            wallet_balance = 0.0
+
         # Calculate total P&L from closed positions
         total_pnl = sum(p.get('pnl_eth', 0) for p in closed)
         wins = sum(1 for p in closed if p.get('pnl_eth', 0) > 0)
@@ -91,6 +98,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
     <h1>Base Chain Scanner</h1>
 
     <div class="grid">
+        <div class="card">
+            <div class="label">Wallet Balance</div>
+            <div class="value">{wallet_balance:.4f} ETH</div>
+        </div>
         <div class="card">
             <div class="label">Active Tokens</div>
             <div class="value">{stats['active_tokens']}</div>
