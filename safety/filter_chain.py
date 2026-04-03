@@ -58,17 +58,17 @@ def run_filter_chain(contract_address: str, dex_data: dict | None = None,
             return False  # Stop chain
         return True  # Continue chain
 
-    # === Filter 1: Contract verified on Basescan ===
-    if REQUIRE_VERIFIED_SOURCE:
-        from safety.contract_analysis import check_verified
-        verification = check_verified(contract_address)
-        if not _add_result(
-            'contract_verified',
-            verification.get('verified', False),
-            'Contract source code not verified on Basescan' if not verification.get('verified') else '',
-            'hard_reject' if not verification.get('verified') else 'info',
-        ):
-            return _build_response(False, results, penalties, goplus_data)
+    # === Filter 1: Contract verified on Basescan (soft penalty — most Base meme coins are unverified) ===
+    from safety.contract_analysis import check_verified
+    verification = check_verified(contract_address)
+    _add_result(
+        'contract_verified',
+        verification.get('verified', False),
+        'Contract source code not verified on Basescan' if not verification.get('verified') else '',
+        'warning' if not verification.get('verified') else 'info',
+    )
+    if not verification.get('verified'):
+        penalties.append(('unverified_contract', -15))
 
     # === Filter 2: Token age >= 20 minutes ===
     token_age_ok = True

@@ -252,11 +252,12 @@ def run_honeypot_checks(contract_address: str) -> dict:
     if not goplus.get('available') and not honeypot.get('available'):
         reasons.append('Neither GoPlus nor Honeypot.is available — cannot verify safety')
 
+    # GoPlus alone is sufficient — Honeypot.is doesn't support Base chain
     passed = (
         not is_honeypot
         and buy_tax <= MAX_BUY_TAX_PCT
         and sell_tax <= MAX_SELL_TAX_PCT
-        and (goplus.get('available') or honeypot.get('available'))
+        and goplus.get('available')
     )
 
     return {
