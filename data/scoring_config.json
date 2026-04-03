@@ -5,7 +5,7 @@
     "last_updated_by": "manual",
     "description": "Fresh scoring config for Base chain — not ported from Solana"
   },
-  "alert_threshold": {"value": 65, "min": 30, "max": 95},
+  "alert_threshold": {"value": 45, "min": 30, "max": 95},
   "min_signal_types": {"value": 2, "min": 1, "max": 5},
   "signals": {
     "smart_wallet_1": {"enabled": true, "points": {"value": 30, "min": 10, "max": 50}, "category": "smart_wallet", "description": "1 tracked wallet bought"},
