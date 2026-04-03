@@ -189,21 +189,36 @@ def _top_token_row(t: dict) -> str:
     signals = t.get('signal_types_count', 0)
     last_scored = (t.get('last_scored') or '')[:16]
 
-    # DexScreener link — use pair address if available, otherwise token search
     if pair:
         dex_link = f'https://dexscreener.com/base/{pair}'
     else:
         dex_link = f'https://dexscreener.com/base/{addr}'
 
-    # Breakdown tooltip
+    # Build expandable signal breakdown
     breakdown = t.get('breakdown', [])
-    breakdown_text = ' | '.join(f'{b.get("signal","")}: {b.get("points",0):+d}' for b in breakdown[:5])
+    breakdown_html = ''
+    if breakdown:
+        rows = ''
+        for b in breakdown:
+            pts = b.get('points', 0)
+            sig = b.get('signal', '')
+            pts_color = 'green' if pts > 0 else 'red' if pts < 0 else ''
+            prefix = '+' if pts > 0 else ''
+            rows += f'<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>{sig}</span><span class="{pts_color}" style="font-weight:600">{prefix}{pts}</span></div>'
+        row_id = addr[:12].replace('0x', '')
+        breakdown_html = (
+            f'<div id="sig-{row_id}" class="signal-detail" style="display:none;padding:6px 8px;background:#0f172a;border-radius:4px;margin-top:4px;font-size:0.8rem;">'
+            f'{rows}</div>'
+        )
 
+    row_id = addr[:12].replace('0x', '')
     return (
         f'<tr>'
-        f'<td><a href="{dex_link}" target="_blank" title="{breakdown_text}">{symbol}</a></td>'
+        f'<td><a href="{dex_link}" target="_blank">{symbol}</a></td>'
         f'<td class="{score_color}" style="font-weight:700">{score}</td>'
-        f'<td>{signals}</td>'
+        f'<td class="signal-cell" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted" '
+        f'onclick="var el=document.getElementById(\'sig-{row_id}\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'">'
+        f'{signals}{breakdown_html}</td>'
         f'<td class="mono">${liquidity:,.0f}</td>'
         f'<td class="mono">${mcap:,.0f}</td>'
         f'<td>{dex_id}</td>'
