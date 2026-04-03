@@ -10,7 +10,7 @@ from web3 import Web3
 from eth_abi import encode
 
 from config.constants import (
-    UNISWAP_V3_ROUTER, AERODROME_ROUTER, WETH_ADDRESS,
+    UNISWAP_V3_ROUTER, UNISWAP_V2_ROUTER, AERODROME_ROUTER, WETH_ADDRESS,
     MAX_BUY_SLIPPAGE_PCT, MAX_SELL_SLIPPAGE_PCT, TRADING_ENABLED,
 )
 from trading.wallet import (
@@ -113,6 +113,9 @@ def _detect_pool_version(token_address: str, dex_id: str = '') -> str:
         if 'v4' in labels:
             write_log(f'EXECUTOR | {token_address[:12]}... detected as V4 pool')
             return 'v4'
+        if 'v2' in labels:
+            write_log(f'EXECUTOR | {token_address[:12]}... detected as V2 pool')
+            return 'v2'
         return 'v3'
     except Exception:
         return 'v3'
@@ -138,18 +141,21 @@ def buy_token(token_address: str, eth_amount: float, dex_id: str = 'uniswap',
         try:
             if pool_version == 'v4':
                 result = _buy_v4(w3, account, token_address, amount_in_wei, slippage_pct)
-            elif pool_version == 'aerodrome':
-                result = _buy_v3(w3, account, token_address, amount_in_wei, slippage_pct)
+            elif pool_version == 'v2':
+                result = _buy_v2(w3, account, token_address, amount_in_wei, slippage_pct)
             else:
                 result = _buy_v3(w3, account, token_address, amount_in_wei, slippage_pct)
 
             if result.get('success'):
                 return result
 
-            # If V3 fails, try V4 (pool might have migrated)
+            # Fallback chain: v3 -> v4 -> v2
             if pool_version == 'v3' and attempt == 1:
                 write_log(f'EXECUTOR | V3 failed, trying V4 fallback')
                 pool_version = 'v4'
+            elif pool_version == 'v4' and attempt == 2:
+                write_log(f'EXECUTOR | V4 failed, trying V2 fallback')
+                pool_version = 'v2'
 
             write_log(f'EXECUTOR | Buy attempt {attempt + 1}/{MAX_ATTEMPTS} failed ({pool_version}): {result.get("error")}')
 
@@ -191,12 +197,16 @@ def sell_token(token_address: str, token_amount: int | None = None,
         try:
             if pool_version == 'v4':
                 router = UNISWAP_V4_ROUTER
+            elif pool_version == 'v2':
+                router = UNISWAP_V2_ROUTER
             else:
                 router = UNISWAP_V3_ROUTER
             _ensure_approval(w3, account, token_address, router, token_amount)
 
             if pool_version == 'v4':
                 result = _sell_v4(w3, account, token_address, token_amount, slippage_pct)
+            elif pool_version == 'v2':
+                result = _sell_v2(w3, account, token_address, token_amount, slippage_pct)
             else:
                 result = _sell_v3(w3, account, token_address, token_amount, slippage_pct)
 
@@ -206,6 +216,9 @@ def sell_token(token_address: str, token_amount: int | None = None,
             if pool_version == 'v3' and attempt == 1:
                 write_log(f'EXECUTOR | V3 sell failed, trying V4 fallback')
                 pool_version = 'v4'
+            elif pool_version == 'v4' and attempt == 2:
+                write_log(f'EXECUTOR | V4 sell failed, trying V2 fallback')
+                pool_version = 'v2'
 
             write_log(f'EXECUTOR | Sell attempt {attempt + 1}/{MAX_ATTEMPTS} failed ({pool_version}): {result.get("error")}')
 
@@ -446,6 +459,143 @@ def _build_v4_swap_data_with_fee(token_in: str, token_out: str, recipient: str,
         [[step], Web3.to_checksum_address(recipient), amount_in, min_out]
     )
     return V4_SWAP_SELECTOR + encoded
+
+
+# === V2 Swap Implementation ===
+
+V2_ROUTER_ABI = [
+    {
+        "inputs": [
+            {"name": "amountOutMin", "type": "uint256"},
+            {"name": "path", "type": "address[]"},
+            {"name": "to", "type": "address"},
+            {"name": "deadline", "type": "uint256"},
+        ],
+        "name": "swapExactETHForTokensSupportingFeeOnTransferTokens",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"name": "amountIn", "type": "uint256"},
+            {"name": "amountOutMin", "type": "uint256"},
+            {"name": "path", "type": "address[]"},
+            {"name": "to", "type": "address"},
+            {"name": "deadline", "type": "uint256"},
+        ],
+        "name": "swapExactTokensForETHSupportingFeeOnTransferTokens",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+]
+
+
+def _buy_v2(w3: Web3, account, token_address: str,
+            amount_in_wei: int, slippage_pct: float) -> dict:
+    """Execute a buy on Uniswap V2 (ETH → Token)."""
+    import time as _time
+
+    router = w3.eth.contract(
+        address=Web3.to_checksum_address(UNISWAP_V2_ROUTER),
+        abi=V2_ROUTER_ABI,
+    )
+
+    token_before = get_token_balance(token_address)
+    deadline = int(_time.time()) + 300
+
+    tx = router.functions.swapExactETHForTokensSupportingFeeOnTransferTokens(
+        0,  # amountOutMin
+        [Web3.to_checksum_address(WETH_ADDRESS), Web3.to_checksum_address(token_address)],
+        account.address,
+        deadline,
+    ).build_transaction({
+        'from': account.address,
+        'value': amount_in_wei,
+        'gas': 300_000,
+        'maxFeePerGas': w3.eth.gas_price * 2,
+        'maxPriorityFeePerGas': w3.to_wei(0.001, 'gwei'),
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'chainId': 8453,
+    })
+
+    try:
+        estimated = w3.eth.estimate_gas(tx)
+        tx['gas'] = int(estimated * 1.2)
+    except Exception:
+        pass
+
+    tx_hash = sign_and_send(tx)
+    receipt = wait_for_receipt(tx_hash, timeout=CONFIRMATION_TIMEOUT)
+
+    if receipt.get('status') == 1:
+        token_after = get_token_balance(token_address)
+        return {
+            'success': True,
+            'tx_hash': tx_hash,
+            'token_amount': token_after - token_before,
+            'eth_spent': float(w3.from_wei(amount_in_wei, 'ether')),
+            'pool_version': 'v2',
+        }
+    else:
+        return {'success': False, 'error': 'V2 transaction reverted', 'tx_hash': tx_hash}
+
+
+def _sell_v2(w3: Web3, account, token_address: str,
+             token_amount: int, slippage_pct: float) -> dict:
+    """Execute a sell on Uniswap V2 (Token → ETH)."""
+    import time as _time
+
+    router = w3.eth.contract(
+        address=Web3.to_checksum_address(UNISWAP_V2_ROUTER),
+        abi=V2_ROUTER_ABI,
+    )
+
+    eth_before = w3.eth.get_balance(account.address)
+    deadline = int(_time.time()) + 300
+
+    tx = router.functions.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        token_amount,
+        0,  # amountOutMin
+        [Web3.to_checksum_address(token_address), Web3.to_checksum_address(WETH_ADDRESS)],
+        account.address,
+        deadline,
+    ).build_transaction({
+        'from': account.address,
+        'value': 0,
+        'gas': 300_000,
+        'maxFeePerGas': w3.eth.gas_price * 2,
+        'maxPriorityFeePerGas': w3.to_wei(0.001, 'gwei'),
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'chainId': 8453,
+    })
+
+    try:
+        estimated = w3.eth.estimate_gas(tx)
+        tx['gas'] = int(estimated * 1.2)
+    except Exception:
+        pass
+
+    tx_hash = sign_and_send(tx)
+    receipt = wait_for_receipt(tx_hash, timeout=CONFIRMATION_TIMEOUT)
+
+    if receipt.get('status') == 1:
+        eth_after = w3.eth.get_balance(account.address)
+        eth_received = float(w3.from_wei(eth_after - eth_before, 'ether'))
+        gas_cost = float(w3.from_wei(
+            receipt.get('gasUsed', 0) * receipt.get('effectiveGasPrice', 0), 'ether'))
+        eth_received += gas_cost
+
+        return {
+            'success': True,
+            'tx_hash': tx_hash,
+            'eth_received': max(eth_received, 0),
+            'gas_cost': gas_cost,
+            'pool_version': 'v2',
+        }
+    else:
+        return {'success': False, 'error': 'V2 sell transaction reverted', 'tx_hash': tx_hash}
 
 
 # === V3 Swap Implementation ===
