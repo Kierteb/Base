@@ -90,27 +90,118 @@ def fetch_single_token(contract_address: str) -> dict | None:
 
 def fetch_base_new_pairs(limit: int = 50) -> list[dict]:
     """
-    Fetch Base chain tokens from multiple DexScreener endpoints:
-    1. Token boosts (promoted tokens)
-    2. Search queries for Base trending categories
-    3. Token profiles
+    Fetch Base chain tokens from GeckoTerminal (trending + new pools)
+    and DexScreener (boosts/profiles). GeckoTerminal provides the actual
+    trending/gainers data that DexScreener's public API doesn't expose.
     """
     all_pairs = {}
 
-    # Method 1: Token profiles (latest promoted)
-    try:
-        resp = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
-        resp.raise_for_status()
-        profiles = resp.json()
-        base_addresses = [p['tokenAddress'] for p in profiles if p.get('chainId') == 'base']
-        if base_addresses:
-            token_data = fetch_token_data(base_addresses)
-            for addr, data in token_data.items():
-                all_pairs[addr] = data
-    except (requests.RequestException, ValueError) as e:
-        write_log(f'DEXSCREENER | Token profiles error: {e}')
+    # Method 1: GeckoTerminal trending pools on Base (the real gainers)
+    for endpoint in ['trending_pools', 'new_pools']:
+        try:
+            resp = requests.get(
+                f'https://api.geckoterminal.com/api/v2/networks/base/{endpoint}?page=1',
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            pools = data.get('data', [])
 
-    # Method 2: Token boosts
+            # Extract token addresses from pool relationships
+            included = {item['id']: item for item in data.get('included', [])}
+
+            for pool in pools:
+                attrs = pool.get('attributes', {})
+                name = attrs.get('name', '')
+                pool_addr = attrs.get('address', '')
+
+                # Get the base token address from the pool name/relationships
+                relationships = pool.get('relationships', {})
+                base_token_data = relationships.get('base_token', {}).get('data', {})
+                base_token_id = base_token_data.get('id', '')
+
+                # Token ID format is "base_ADDRESS"
+                if base_token_id.startswith('base_'):
+                    token_address = base_token_id.replace('base_', '').lower()
+                else:
+                    continue
+
+                if token_address in all_pairs:
+                    continue
+
+                # Skip WETH, USDC, cbBTC etc
+                symbol = name.split(' / ')[0].strip() if ' / ' in name else name
+                if symbol.upper() in ('WETH', 'USDC', 'USDT', 'DAI', 'CBBTC', 'CBETH'):
+                    continue
+
+                vol_24h = float(attrs.get('volume_usd', {}).get('h24', 0) or 0)
+                reserve = float(attrs.get('reserve_in_usd', 0) or 0)
+
+                all_pairs[token_address] = {
+                    'contract_address': token_address,
+                    'symbol': symbol,
+                    'name': name,
+                    'price_usd': float(attrs.get('base_token_price_usd', 0) or 0),
+                    'liquidity_usd': reserve,
+                    'h24_volume': vol_24h,
+                    'pair_address': pool_addr,
+                    'dex_id': attrs.get('dex_id', ''),
+                    'pair_created_at': attrs.get('pool_created_at'),
+                    'url': f'https://www.geckoterminal.com/base/pools/{pool_addr}',
+                }
+
+            time.sleep(0.3)
+        except (requests.RequestException, ValueError) as e:
+            write_log(f'GECKOTERMINAL | {endpoint} error: {e}')
+
+    # Method 2: GeckoTerminal top volume pools (catches active tokens)
+    try:
+        resp = requests.get(
+            'https://api.geckoterminal.com/api/v2/networks/base/pools?page=1&sort=h24_volume_usd_desc',
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        for pool in data.get('data', []):
+            attrs = pool.get('attributes', {})
+            name = attrs.get('name', '')
+            pool_addr = attrs.get('address', '')
+
+            relationships = pool.get('relationships', {})
+            base_token_data = relationships.get('base_token', {}).get('data', {})
+            base_token_id = base_token_data.get('id', '')
+
+            if base_token_id.startswith('base_'):
+                token_address = base_token_id.replace('base_', '').lower()
+            else:
+                continue
+
+            if token_address in all_pairs:
+                continue
+
+            symbol = name.split(' / ')[0].strip() if ' / ' in name else name
+            if symbol.upper() in ('WETH', 'USDC', 'USDT', 'DAI', 'CBBTC', 'CBETH'):
+                continue
+
+            vol_24h = float(attrs.get('volume_usd', {}).get('h24', 0) or 0)
+            reserve = float(attrs.get('reserve_in_usd', 0) or 0)
+
+            all_pairs[token_address] = {
+                'contract_address': token_address,
+                'symbol': symbol,
+                'name': name,
+                'price_usd': float(attrs.get('base_token_price_usd', 0) or 0),
+                'liquidity_usd': reserve,
+                'h24_volume': vol_24h,
+                'pair_address': pool_addr,
+                'dex_id': attrs.get('dex_id', ''),
+                'pair_created_at': attrs.get('pool_created_at'),
+                'url': f'https://www.geckoterminal.com/base/pools/{pool_addr}',
+            }
+    except (requests.RequestException, ValueError) as e:
+        write_log(f'GECKOTERMINAL | Top volume error: {e}')
+
+    # Method 3: DexScreener token boosts (promoted tokens)
     try:
         boosts = fetch_token_boosts()
         if boosts:
@@ -118,50 +209,14 @@ def fetch_base_new_pairs(limit: int = 50) -> list[dict]:
             if boost_addresses:
                 token_data = fetch_token_data(boost_addresses)
                 for addr, data in token_data.items():
-                    all_pairs[addr] = data
+                    if addr not in all_pairs:
+                        all_pairs[addr] = data
     except Exception as e:
         write_log(f'DEXSCREENER | Token boosts error: {e}')
 
-    # Method 3: Search queries for trending Base tokens
-    search_queries = ['base meme', 'base new', 'base trending', 'base degen']
-    for query in search_queries:
-        try:
-            resp = requests.get(
-                f'{DEXSCREENER_BASE_URL}/search',
-                params={'q': query},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            for pair in (data.get('pairs') or []):
-                if pair.get('chainId') != 'base':
-                    continue
-                address = pair.get('baseToken', {}).get('address', '').lower()
-                if not address or address in all_pairs:
-                    continue
-
-                liquidity = pair.get('liquidity') or {}
-                volume = pair.get('volume') or {}
-
-                all_pairs[address] = {
-                    'contract_address': address,
-                    'symbol': pair.get('baseToken', {}).get('symbol', ''),
-                    'name': pair.get('baseToken', {}).get('name', ''),
-                    'price_usd': float(pair.get('priceUsd') or 0),
-                    'liquidity_usd': float(liquidity.get('usd', 0) or 0),
-                    'h24_volume': float(volume.get('h24', 0) or 0),
-                    'pair_address': pair.get('pairAddress', ''),
-                    'dex_id': pair.get('dexId', ''),
-                    'pair_created_at': pair.get('pairCreatedAt'),
-                    'url': pair.get('url', ''),
-                }
-            time.sleep(0.3)
-        except (requests.RequestException, ValueError) as e:
-            write_log(f'DEXSCREENER | Search "{query}" error: {e}')
-
     results = list(all_pairs.values())[:limit]
     if results:
-        write_log(f'DEXSCREENER | Discovered {len(results)} Base token(s) from profiles/boosts/search')
+        write_log(f'DISCOVERY | Found {len(results)} Base token(s) from GeckoTerminal trending/new/volume + DexScreener boosts')
     return results
 
 
